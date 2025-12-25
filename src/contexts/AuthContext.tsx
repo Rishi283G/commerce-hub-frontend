@@ -6,6 +6,8 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  displayName: string;
+  avatarUrl?: string;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -20,6 +22,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin' || user?.user_metadata?.role === 'admin';
+  
+  // Identity logic
+  const displayName = user?.user_metadata?.full_name || user?.name || user?.email?.split('@')[0] || 'User';
+  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
 
   useEffect(() => {
     // Listen for Supabase auth state changes (handles OAuth redirects)
@@ -67,11 +73,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await authApi.login(email, password);
-    // Note: The onAuthStateChange above might handle this too if we used supabase client directly here,
-    // but we are using authApi (which calls backend).
-    // Because supabase client in frontend is also init, it might fire SIGNED_IN if they share session?
-    // Actually, backend returns token. Supabase client might NOT know about it unless we setSession.
-    // For now, keep this manual setting for email/pass login which goes via backend API.
     localStorage.setItem('auth_token', response.token);
     localStorage.setItem('auth_user', JSON.stringify(response.user));
     setUser(response.user);
@@ -107,7 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
-        isAdmin, // Expose admin status
+        isAdmin,
+        displayName,
+        avatarUrl,
         isLoading,
         login,
         loginWithGoogle,
