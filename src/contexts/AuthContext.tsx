@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { authApi, User } from '@/services/api';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
 }
@@ -16,36 +19,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const isAdmin = user?.role === 'admin' || user?.user_metadata?.role === 'admin';
+
   useEffect(() => {
-    // Check for existing auth token on mount
+    // Listen for Supabase auth state changes (handles OAuth redirects)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        localStorage.setItem('auth_token', session.access_token);
+        
+        // Construct user object consistent with our app's User interface
+        const appUser: User = {
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata.full_name || session.user.email!.split('@')[0],
+          role: session.user.role, // This comes from Supabase built-in role
+          user_metadata: session.user.user_metadata,
+        };
+        
+        localStorage.setItem('auth_user', JSON.stringify(appUser));
+        setUser(appUser);
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        setUser(null);
+      }
+    });
+
+    // Check for existing auth token and user on mount
     const token = localStorage.getItem('auth_token');
-    if (token) {
-      authApi.getProfile()
-        .then(setUser)
-        .catch(() => {
-          localStorage.removeItem('auth_token');
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
+    const storedUser = localStorage.getItem('auth_user');
+    
+    if (token && storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse stored user", e);
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_token');
+      }
     }
+    setIsLoading(false);
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await authApi.login(email, password);
+    // Note: The onAuthStateChange above might handle this too if we used supabase client directly here,
+    // but we are using authApi (which calls backend).
+    // Because supabase client in frontend is also init, it might fire SIGNED_IN if they share session?
+    // Actually, backend returns token. Supabase client might NOT know about it unless we setSession.
+    // For now, keep this manual setting for email/pass login which goes via backend API.
     localStorage.setItem('auth_token', response.token);
+    localStorage.setItem('auth_user', JSON.stringify(response.user));
     setUser(response.user);
   }, []);
 
+  const loginWithGoogle = useCallback(async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
+  }, []);
+
   const signup = useCallback(async (email: string, password: string, name: string) => {
-    const response = await authApi.signup(email, password, name);
+    const response = await authApi.register(email, password, name);
     localStorage.setItem('auth_token', response.token);
+    localStorage.setItem('auth_user', JSON.stringify(response.user));
     setUser(response.user);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     setUser(null);
+    supabase.auth.signOut(); // Ensure Supabase client also signs out
+    authApi.logout().catch(() => {});
   }, []);
 
   return (
@@ -53,8 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
+        isAdmin, // Expose admin status
         isLoading,
         login,
+        loginWithGoogle,
         signup,
         logout,
       }}

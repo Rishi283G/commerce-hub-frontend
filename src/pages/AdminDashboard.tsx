@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Edit, Trash2, Search, Package } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -57,7 +59,26 @@ const initialProducts: Product[] = [
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const { user, isAdmin, isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        navigate('/auth');
+      } else if (!isAdmin) {
+        toast({
+          title: 'Access Denied',
+          description: 'You do not have permission to view this page.',
+          variant: 'destructive',
+        });
+        navigate('/');
+      }
+    }
+  }, [isAuthenticated, isAdmin, isLoading, navigate, toast]);
+
   const [products, setProducts] = useState<Product[]>(initialProducts);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);

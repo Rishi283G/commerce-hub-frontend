@@ -1,80 +1,98 @@
-// API Service - Abstracted API calls for the e-commerce store
+import axios, { AxiosRequestConfig } from 'axios';
+
 // Configure the base URL via environment variable
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+// Create axios instance
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {} } = options;
-
-  const config: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  };
-
-  if (body) {
-    config.body = JSON.stringify(body);
+// Request interceptor for API calls
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
 
-  // Add auth token if available
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers = {
-      ...config.headers,
-      Authorization: `Bearer ${token}`,
-    };
+// Response interceptor for API calls
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    if (error.response && error.response.status === 401) {
+      // Handle unauthorized access (e.g., redirect to login)
+      localStorage.removeItem('auth_token');
+      // basic window redirect to prevent circular dependency with router
+      if (window.location.pathname !== '/auth') {
+         window.location.href = '/auth';
+      }
+    }
+    return Promise.reject(error);
   }
+);
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || 'Request failed');
+// Generic request wrapper
+async function request<T>(config: AxiosRequestConfig): Promise<T> {
+  try {
+    const response = await api(config);
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || error.message || 'Request failed';
+    throw new Error(message);
   }
-
-  return response.json();
 }
 
 // Product APIs
 export const productApi = {
   getAll: (params?: { category?: string; search?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.category) searchParams.append('category', params.category);
-    if (params?.search) searchParams.append('search', params.search);
-    const query = searchParams.toString();
-    return request<Product[]>(`/products${query ? `?${query}` : ''}`);
+    return request<Product[]>({
+      url: '/products',
+      method: 'GET',
+      params,
+    });
   },
-  getById: (id: string) => request<Product>(`/products/${id}`),
-  getFeatured: () => request<Product[]>('/products/featured'),
-  getCategories: () => request<Category[]>('/categories'),
-  create: (data: Partial<Product>) => request<Product>('/products', { method: 'POST', body: data }),
-  update: (id: string, data: Partial<Product>) => request<Product>(`/products/${id}`, { method: 'PUT', body: data }),
-  delete: (id: string) => request<void>(`/products/${id}`, { method: 'DELETE' }),
+  getById: (id: string) => request<Product>({ url: `/products/${id}`, method: 'GET' }),
+  getFeatured: () => request<Product[]>({ url: '/products/featured', method: 'GET' }),
+  getCategories: () => request<Category[]>({ url: '/categories', method: 'GET' }),
+  create: (data: Partial<Product>) => request<Product>({ url: '/products', method: 'POST', data }),
+  update: (id: string, data: Partial<Product>) => request<Product>({ url: `/products/${id}`, method: 'PUT', data }),
+  delete: (id: string) => request<void>({ url: `/products/${id}`, method: 'DELETE' }),
 };
 
 // Auth APIs
 export const authApi = {
   login: (email: string, password: string) => 
-    request<AuthResponse>('/auth/login', { method: 'POST', body: { email, password } }),
-  signup: (email: string, password: string, name: string) => 
-    request<AuthResponse>('/auth/signup', { method: 'POST', body: { email, password, name } }),
-  logout: () => request<void>('/auth/logout', { method: 'POST' }),
-  getProfile: () => request<User>('/auth/profile'),
+    request<AuthResponse>({ url: '/auth/login', method: 'POST', data: { email, password } }),
+  
+  // Changed from signup to register as per backend requirements
+  register: (email: string, password: string, name: string) => 
+    request<AuthResponse>({ url: '/auth/register', method: 'POST', data: { email, password, name } }),
+    
+  logout: () => {
+    localStorage.removeItem('auth_token');
+    return Promise.resolve();
+  },
+  
+  getProfile: () => request<User>({ url: '/auth/me', method: 'GET' }), // Assuming backend has a /me or profile endpoint, if not we rely on stored user
 };
 
 // Order APIs
 export const orderApi = {
-  getAll: () => request<Order[]>('/orders'),
-  getById: (id: string) => request<Order>(`/orders/${id}`),
-  create: (data: CreateOrderData) => request<Order>('/orders', { method: 'POST', body: data }),
+  getAll: () => request<Order[]>({ url: '/orders', method: 'GET' }),
+  getById: (id: string) => request<Order>({ url: `/orders/${id}`, method: 'GET' }),
+  create: (data: CreateOrderData) => request<Order>({ url: '/orders', method: 'POST', data }),
 };
 
 // Types
@@ -98,7 +116,12 @@ export interface Category {
 export interface User {
   id: string;
   email: string;
-  name: string;
+  name?: string;
+  role?: string; 
+  user_metadata?: {
+    role?: string;
+    [key: string]: any;
+  };
 }
 
 export interface AuthResponse {
@@ -131,3 +154,4 @@ export interface CreateOrderData {
     country: string;
   };
 }
+

@@ -8,30 +8,35 @@ import { useAuth } from '@/contexts/AuthContext';
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { totalItems } = useCart();
-  const { isAuthenticated, logout } = useAuth();
-
-  return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <Package className="h-6 w-6 text-primary" />
-          <span className="text-xl font-semibold text-foreground">Store</span>
-        </Link>
-
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Home
-          </Link>
-          <Link to="/products" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Products
-          </Link>
-          {isAuthenticated && (
-            <Link to="/orders" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Orders
-            </Link>
-          )}
-        </nav>
+  const { isAuthenticated, logout, isAdmin } = useAuth();
+ 
+   return (
+     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+       <div className="container flex h-16 items-center justify-between">
+         <Link to="/" className="flex items-center gap-2">
+           <Package className="h-6 w-6 text-primary" />
+           <span className="text-xl font-semibold text-foreground">Store</span>
+         </Link>
+ 
+         {/* Desktop Navigation */}
+         <nav className="hidden md:flex items-center gap-6">
+           <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+             Home
+           </Link>
+           <Link to="/products" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+             Products
+           </Link>
+           {isAuthenticated && (
+             <Link to="/orders" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+               Orders
+             </Link>
+           )}
+           {isAdmin && (
+             <Link to="/admin" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+               Admin
+             </Link>
+           )}
+         </nav>
 
         <div className="flex items-center gap-4">
           <Link to="/cart" className="relative">
@@ -103,6 +108,15 @@ export function Header() {
                 >
                   My Orders
                 </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admin Dashboard
+                  </Link>
+                )}
                 <Button variant="outline" size="sm" onClick={() => { logout(); setIsMenuOpen(false); }}>
                   Logout
                 </Button>
