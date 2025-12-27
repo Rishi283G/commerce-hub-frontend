@@ -20,10 +20,14 @@ export function Header() {
   const { isAuthenticated, logout, isAdmin, user, displayName, avatarUrl } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    setIsMenuOpen(false);
-    navigate('/auth');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsMenuOpen(false);
+      navigate('/auth');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const getInitials = (name: string) => {
