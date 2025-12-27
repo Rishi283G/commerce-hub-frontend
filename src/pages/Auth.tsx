@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -11,15 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { login, signup, loginWithGoogle, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, signup, loginWithGoogle } = useAuth();
   const { toast } = useToast();
-
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigate('/');
-    }
-  }, [isAuthenticated, authLoading, navigate]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
