@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Edit, Trash2, Search, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Layout } from '@/components/layout/Layout';
@@ -15,55 +15,37 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Product } from '@/services/api';
-
-// Mock admin products - in production, fetch from API
-const initialProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Minimalist Desk Lamp',
-    description: 'Elegant brass desk lamp with adjustable arm',
-    price: 89.00,
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=400&fit=crop',
-    category: 'Lighting',
-    stock: 15,
-  },
-  {
-    id: '2',
-    name: 'Ceramic Vase Set',
-    description: 'Handcrafted ceramic vases in neutral tones',
-    price: 65.00,
-    image: 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 20,
-  },
-  {
-    id: '3',
-    name: 'Marble Bowl',
-    description: 'Natural marble decorative bowl',
-    price: 45.00,
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 12,
-  },
-  {
-    id: '4',
-    name: 'Wooden Coffee Table',
-    description: 'Mid-century modern coffee table',
-    price: 299.00,
-    image: 'https://images.unsplash.com/photo-1532372320572-cda25653a26d?w=400&h=400&fit=crop',
-    category: 'Furniture',
-    stock: 8,
-  },
-];
+import { Product, productApi } from '@/services/api';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
-  const { user, isAdmin, isAuthenticated, isLoading } = useAuth();
+  const { isAdmin, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch products from API
+  const fetchProducts = useCallback(async () => {
+    try {
+      setIsLoadingProducts(true);
+      const data = await productApi.getAll();
+      setProducts(data);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading products',
+        description: error.message || 'Failed to load products',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    if (!isLoading) {
+    if (!authLoading) {
       if (!isAuthenticated) {
         navigate('/auth');
       } else if (!isAdmin) {
@@ -73,11 +55,12 @@ export default function AdminDashboard() {
           variant: 'destructive',
         });
         navigate('/');
+      } else {
+        // Only fetch products if user is authenticated admin
+        fetchProducts();
       }
     }
-  }, [isAuthenticated, isAdmin, isLoading, navigate, toast]);
-
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  }, [isAuthenticated, isAdmin, authLoading, navigate, toast, fetchProducts]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -121,46 +104,73 @@ export default function AdminDashboard() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    const productData: Product = {
-      id: editingProduct?.id || Date.now().toString(),
+    const productData = {
       name: formData.name,
       description: formData.description,
       price: parseFloat(formData.price),
-      image: formData.image,
-      category: formData.category,
+      image_url: formData.image,
       stock: parseInt(formData.stock),
     };
 
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? productData : p))
-      );
+    try {
+      if (editingProduct) {
+        await productApi.update(editingProduct.id, productData);
+        toast({
+          title: 'Product updated',
+          description: `${productData.name} has been updated successfully.`,
+        });
+      } else {
+        await productApi.create(productData);
+        toast({
+          title: 'Product added',
+          description: `${productData.name} has been added to the catalog.`,
+        });
+      }
+      // Refresh the products list
+      await fetchProducts();
+      setIsDialogOpen(false);
+    } catch (error: any) {
       toast({
-        title: 'Product updated',
-        description: `${productData.name} has been updated successfully.`,
+        title: editingProduct ? 'Failed to update product' : 'Failed to add product',
+        description: error.message || 'Something went wrong',
+        variant: 'destructive',
       });
-    } else {
-      setProducts((prev) => [...prev, productData]);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const product = products.find((p) => p.id === id);
+    try {
+      await productApi.delete(id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
       toast({
-        title: 'Product added',
-        description: `${productData.name} has been added to the catalog.`,
+        title: 'Product deleted',
+        description: `${product?.name} has been removed from the catalog.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Failed to delete product',
+        description: error.message || 'Something went wrong',
+        variant: 'destructive',
       });
     }
-
-    setIsDialogOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    const product = products.find((p) => p.id === id);
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    toast({
-      title: 'Product deleted',
-      description: `${product?.name} has been removed from the catalog.`,
-    });
-  };
+  if (authLoading || isLoadingProducts) {
+    return (
+      <Layout>
+        <div className="container py-16 flex justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -251,7 +261,8 @@ export default function AdminDashboard() {
                     className="mt-1"
                   />
                 </div>
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {editingProduct ? 'Update Product' : 'Add Product'}
                 </Button>
               </form>
