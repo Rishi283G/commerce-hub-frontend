@@ -1,108 +1,45 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ProductGrid } from '@/components/products/ProductGrid';
 import { Layout } from '@/components/layout/Layout';
-import { Product } from '@/services/api';
-
-// Mock products for demo - in production, these come from API
-const allProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Minimalist Desk Lamp',
-    description: 'Elegant brass desk lamp with adjustable arm. Perfect for modern workspaces and reading nooks.',
-    price: 89.00,
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=400&fit=crop',
-    category: 'Lighting',
-    stock: 15,
-    featured: true,
-  },
-  {
-    id: '2',
-    name: 'Ceramic Vase Set',
-    description: 'Handcrafted ceramic vases in neutral tones. Set of 3 different sizes.',
-    price: 65.00,
-    image: 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 20,
-    featured: true,
-  },
-  {
-    id: '3',
-    name: 'Marble Bowl',
-    description: 'Natural marble decorative bowl. Each piece is unique due to natural stone variations.',
-    price: 45.00,
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 12,
-    featured: true,
-  },
-  {
-    id: '4',
-    name: 'Wooden Coffee Table',
-    description: 'Mid-century modern coffee table crafted from solid walnut wood.',
-    price: 299.00,
-    image: 'https://images.unsplash.com/photo-1532372320572-cda25653a26d?w=400&h=400&fit=crop',
-    category: 'Furniture',
-    stock: 8,
-    featured: true,
-  },
-  {
-    id: '5',
-    name: 'Linen Throw Blanket',
-    description: 'Soft linen throw blanket in natural color. Machine washable.',
-    price: 78.00,
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&h=400&fit=crop',
-    category: 'Textiles',
-    stock: 25,
-  },
-  {
-    id: '6',
-    name: 'Glass Pendant Light',
-    description: 'Hand-blown glass pendant light with brass hardware.',
-    price: 145.00,
-    image: 'https://images.unsplash.com/photo-1524484485831-a92ffc0de03f?w=400&h=400&fit=crop',
-    category: 'Lighting',
-    stock: 10,
-  },
-  {
-    id: '7',
-    name: 'Ceramic Planter',
-    description: 'Modern ceramic planter with drainage hole. Available in multiple sizes.',
-    price: 35.00,
-    image: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 30,
-  },
-  {
-    id: '8',
-    name: 'Wooden Side Table',
-    description: 'Compact side table made from oak wood with brass accents.',
-    price: 175.00,
-    image: 'https://images.unsplash.com/photo-1499933374294-4584851497cc?w=400&h=400&fit=crop',
-    category: 'Furniture',
-    stock: 6,
-  },
-];
+import { Product, productApi } from '@/services/api';
 
 const categories = ['All', 'Furniture', 'Lighting', 'Decor', 'Textiles'];
 
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [isLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setIsLoading(true);
+        const data = await productApi.getAll();
+        setProducts(data);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const filteredProducts = useMemo(() => {
-    return allProducts.filter((product) => {
+    return products.filter((product) => {
       const matchesSearch =
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase());
+        product.description?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        ''; // safe access description
       const matchesCategory =
         selectedCategory === 'All' || product.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, products]);
 
   return (
     <Layout>

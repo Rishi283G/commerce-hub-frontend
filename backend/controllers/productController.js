@@ -47,12 +47,12 @@ export const getProduct = asyncHandler(async (req, res, next) => {
 // @route   POST /api/products
 // @access  Private (Admin)
 export const createProduct = asyncHandler(async (req, res, next) => {
-  const { name, description, price, stock, image_url } = req.body;
+  const { name, description, price, stock, image_url, category, featured } = req.body;
 
   const { data, error } = await supabase
     .from('products')
     .insert([
-      { name, description, price, stock, image_url }
+      { name, description, price, stock, image_url, category, featured }
     ])
     .select();
 

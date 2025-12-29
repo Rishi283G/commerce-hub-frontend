@@ -1,54 +1,11 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Truck, Shield, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProductGrid } from '@/components/products/ProductGrid';
 import { Layout } from '@/components/layout/Layout';
 import heroBanner from '@/assets/hero-banner.jpg';
-import { Product } from '@/services/api';
-
-// Mock featured products for demo - in production, these come from API
-const featuredProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Minimalist Desk Lamp',
-    description: 'Elegant brass desk lamp with adjustable arm',
-    price: 89.00,
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=400&fit=crop',
-    category: 'Lighting',
-    stock: 15,
-    featured: true,
-  },
-  {
-    id: '2',
-    name: 'Ceramic Vase Set',
-    description: 'Handcrafted ceramic vases in neutral tones',
-    price: 65.00,
-    image: 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 20,
-    featured: true,
-  },
-  {
-    id: '3',
-    name: 'Marble Bowl',
-    description: 'Natural marble decorative bowl',
-    price: 45.00,
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 12,
-    featured: true,
-  },
-  {
-    id: '4',
-    name: 'Wooden Coffee Table',
-    description: 'Mid-century modern coffee table',
-    price: 299.00,
-    image: 'https://images.unsplash.com/photo-1532372320572-cda25653a26d?w=400&h=400&fit=crop',
-    category: 'Furniture',
-    stock: 8,
-    featured: true,
-  },
-];
+import { Product, productApi } from '@/services/api';
 
 const features = [
   {
@@ -69,6 +26,24 @@ const features = [
 ];
 
 export default function Home() {
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      try {
+        setIsLoading(true);
+        const data = await productApi.getFeatured();
+        setFeaturedProducts(data);
+      } catch (error) {
+        console.error('Failed to fetch featured products:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchFeatured();
+  }, []);
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -145,7 +120,7 @@ export default function Home() {
               </Button>
             </Link>
           </div>
-          <ProductGrid products={featuredProducts} />
+          <ProductGrid products={featuredProducts} isLoading={isLoading} />
         </div>
       </section>
 

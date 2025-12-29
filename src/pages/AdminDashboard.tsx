@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Edit, Trash2, Search, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Layout } from '@/components/layout/Layout';
@@ -15,55 +15,34 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Product } from '@/services/api';
-
-// Mock admin products - in production, fetch from API
-const initialProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Minimalist Desk Lamp',
-    description: 'Elegant brass desk lamp with adjustable arm',
-    price: 89.00,
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=400&fit=crop',
-    category: 'Lighting',
-    stock: 15,
-  },
-  {
-    id: '2',
-    name: 'Ceramic Vase Set',
-    description: 'Handcrafted ceramic vases in neutral tones',
-    price: 65.00,
-    image: 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 20,
-  },
-  {
-    id: '3',
-    name: 'Marble Bowl',
-    description: 'Natural marble decorative bowl',
-    price: 45.00,
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=400&fit=crop',
-    category: 'Decor',
-    stock: 12,
-  },
-  {
-    id: '4',
-    name: 'Wooden Coffee Table',
-    description: 'Mid-century modern coffee table',
-    price: 299.00,
-    image: 'https://images.unsplash.com/photo-1532372320572-cda25653a26d?w=400&h=400&fit=crop',
-    category: 'Furniture',
-    stock: 8,
-  },
-];
+import { Product, productApi } from '@/services/api';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
-  const { user, isAdmin, isAuthenticated, isLoading } = useAuth();
+  const { user, isAdmin, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const navigate = useNavigate();
   
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      setIsLoadingProducts(true);
+      const data = await productApi.getAll();
+      setProducts(data);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch products',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    if (!isLoading) {
+    if (!isAuthLoading) {
       if (!isAuthenticated) {
         navigate('/auth');
       } else if (!isAdmin) {
@@ -73,15 +52,16 @@ export default function AdminDashboard() {
           variant: 'destructive',
         });
         navigate('/');
+      } else {
+        fetchProducts();
       }
     }
-  }, [isAuthenticated, isAdmin, isLoading, navigate, toast]);
-
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  }, [isAuthenticated, isAdmin, isAuthLoading, navigate, toast, fetchProducts]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -101,10 +81,10 @@ export default function AdminDashboard() {
       setEditingProduct(product);
       setFormData({
         name: product.name,
-        description: product.description,
+        description: product.description || '',
         price: product.price.toString(),
-        image: product.image,
-        category: product.category,
+        image: product.image || '',
+        category: product.category || '',
         stock: product.stock.toString(),
       });
     } else {
@@ -121,45 +101,67 @@ export default function AdminDashboard() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    const productData: Product = {
-      id: editingProduct?.id || Date.now().toString(),
-      name: formData.name,
-      description: formData.description,
-      price: parseFloat(formData.price),
-      image: formData.image,
-      category: formData.category,
-      stock: parseInt(formData.stock),
-    };
+    try {
+      const productData: Partial<Product> = {
+        name: formData.name,
+        description: formData.description,
+        price: parseFloat(formData.price),
+        image: formData.image,
+        category: formData.category,
+        stock: parseInt(formData.stock),
+      };
 
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? productData : p))
-      );
+      if (editingProduct) {
+        const updatedProduct = await productApi.update(editingProduct.id, productData);
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editingProduct.id ? updatedProduct : p))
+        );
+        toast({
+          title: 'Product updated',
+          description: `${updatedProduct.name} has been updated successfully.`,
+        });
+      } else {
+        const newProduct = await productApi.create(productData);
+        setProducts((prev) => [...prev, newProduct]);
+        toast({
+          title: 'Product added',
+          description: `${newProduct.name} has been added to the catalog.`,
+        });
+      }
+      setIsDialogOpen(false);
+    } catch (error: any) {
       toast({
-        title: 'Product updated',
-        description: `${productData.name} has been updated successfully.`,
+        title: 'Error',
+        description: error.message || 'Failed to save product',
+        variant: 'destructive',
       });
-    } else {
-      setProducts((prev) => [...prev, productData]);
-      toast({
-        title: 'Product added',
-        description: `${productData.name} has been added to the catalog.`,
-      });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsDialogOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    const product = products.find((p) => p.id === id);
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    toast({
-      title: 'Product deleted',
-      description: `${product?.name} has been removed from the catalog.`,
-    });
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    
+    try {
+      await productApi.delete(id);
+      const product = products.find((p) => p.id === id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      toast({
+        title: 'Product deleted',
+        description: `${product?.name} has been removed from the catalog.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete product',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
